@@ -25,11 +25,10 @@ use tokio::{
 };
 
 use crate::{
-    Broadcaster, ClaudeSession, MessagePayload, SystemMessage, Transcript,
-    bridge::{Claude, Claudes},
-    db,
+    Broadcaster, ClaudeSession, MessagePayload, SystemMessage, Transcript, db,
     rules::list_claude_assignment_rules,
     send_claude_message,
+    session::{Claude, Claudes},
 };
 
 #[derive(Deserialize, Debug, Clone)]
@@ -79,7 +78,7 @@ impl Claudes {
         sync_ctx: ThreadSafeContext,
         broadcaster: Arc<Mutex<Broadcaster>>,
         stack_id: StackId,
-    ) -> () {
+    ) {
         let res = self
             .compact_inner(sync_ctx.clone(), broadcaster.clone(), stack_id)
             .await;

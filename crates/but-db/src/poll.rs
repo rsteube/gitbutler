@@ -42,7 +42,11 @@ impl DbHandle {
                 'outer: loop {
                     std::thread::sleep(interval);
                     for to_check in ItemKind::all().iter() {
-                        let send_result = if kind & to_check == ItemKind::Actions {
+                        // Skip item kinds we're not interested in
+                        if !kind.contains(to_check) {
+                            continue;
+                        }
+                        let send_result = if to_check == ItemKind::Actions {
                             let res = db.butler_actions().list(0, i64::MAX);
                             match res {
                                 Ok((_num_items, items)) => {
@@ -55,7 +59,7 @@ impl DbHandle {
                                 }
                                 Err(e) => tx.send(Err(e)),
                             }
-                        } else if kind & to_check == ItemKind::Workflows {
+                        } else if to_check == ItemKind::Workflows {
                             let res = db.workflows().list(0, i64::MAX);
                             match res {
                                 Ok((_num_items, items)) => {
@@ -68,7 +72,7 @@ impl DbHandle {
                                 }
                                 Err(e) => tx.send(Err(e)),
                             }
-                        } else if kind & to_check == ItemKind::Assignments {
+                        } else if to_check == ItemKind::Assignments {
                             let res = db.hunk_assignments().list_all();
                             match res {
                                 Ok(items) => {
@@ -81,7 +85,7 @@ impl DbHandle {
                                 }
                                 Err(e) => tx.send(Err(e)),
                             }
-                        } else if kind & to_check == ItemKind::Rules {
+                        } else if to_check == ItemKind::Rules {
                             let res = db.workspace_rules().list();
                             match res {
                                 Ok(items) => {
@@ -94,7 +98,7 @@ impl DbHandle {
                                 }
                                 Err(e) => tx.send(Err(e)),
                             }
-                        } else if kind & to_check == ItemKind::ClaudePermissionRequests {
+                        } else if to_check == ItemKind::ClaudePermissionRequests {
                             let res = db.claude().list_permission_requests();
                             match res {
                                 Ok(items) => {
@@ -146,7 +150,11 @@ impl DbHandle {
             loop {
                 ticker.tick().await;
                 for to_check in ItemKind::all().iter() {
-                    let send_result = if kind & to_check == ItemKind::Actions {
+                    // Skip item kinds we're not interested in
+                    if !kind.contains(to_check) {
+                        continue;
+                    }
+                    let send_result = if to_check == ItemKind::Actions {
                         let res = this.butler_actions().list(0, i64::MAX);
                         match res {
                             Ok((_num_items, items)) => {
@@ -159,7 +167,7 @@ impl DbHandle {
                             }
                             Err(e) => tx.send(Err(e.into())).await,
                         }
-                    } else if kind & to_check == ItemKind::Workflows {
+                    } else if to_check == ItemKind::Workflows {
                         let res = this.workflows().list(0, i64::MAX);
                         match res {
                             Ok((_num_items, items)) => {
@@ -172,7 +180,7 @@ impl DbHandle {
                             }
                             Err(e) => tx.send(Err(e.into())).await,
                         }
-                    } else if kind & to_check == ItemKind::Assignments {
+                    } else if to_check == ItemKind::Assignments {
                         let res = this.hunk_assignments().list_all();
                         match res {
                             Ok(items) => {
@@ -185,7 +193,7 @@ impl DbHandle {
                             }
                             Err(e) => tx.send(Err(e.into())).await,
                         }
-                    } else if kind & to_check == ItemKind::Rules {
+                    } else if to_check == ItemKind::Rules {
                         let res = this.workspace_rules().list();
                         match res {
                             Ok(items) => {
@@ -198,7 +206,7 @@ impl DbHandle {
                             }
                             Err(e) => tx.send(Err(e.into())).await,
                         }
-                    } else if kind & to_check == ItemKind::ClaudePermissionRequests {
+                    } else if to_check == ItemKind::ClaudePermissionRequests {
                         let res = this.claude().list_permission_requests();
                         match res {
                             Ok(items) => {
