@@ -2,7 +2,6 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use but_ctx::ThreadSafeContext;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::Mutex;
@@ -491,22 +490,17 @@ pub struct ClaudeUserParams {
     pub attachments: Option<Vec<PromptAttachment>>,
 }
 
-pub async fn send_claude_message(
-    sync_ctx: ThreadSafeContext,
-    broadcaster: Arc<Mutex<Broadcaster>>,
+pub fn send_claude_message(
+    ctx: &mut but_ctx::Context,
+    broadcaster: &Broadcaster,
     session_id: uuid::Uuid,
     stack_id: StackId,
     content: MessagePayload,
 ) -> Result<()> {
-    let (message, project_id) = {
-        let mut ctx = sync_ctx.into_thread_local();
-        (
-            db::save_new_message(&mut ctx, session_id, content.clone())?,
-            ctx.legacy_project.id,
-        )
-    };
+    let message = db::save_new_message(ctx, session_id, content.clone())?;
+    let project_id = ctx.legacy_project.id;
 
-    broadcaster.lock().await.send(FrontendEvent {
+    broadcaster.send(FrontendEvent {
         name: format!("project://{project_id}/claude/{stack_id}/message_received"),
         payload: json!(message),
     });

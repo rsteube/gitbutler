@@ -166,16 +166,17 @@ impl Claudes {
             };
 
             if let Some(rule) = rule {
+                let broadcaster = broadcaster.lock().await;
+                let mut ctx = sync_ctx.into_thread_local();
                 let _ = send_claude_message(
-                    sync_ctx,
-                    broadcaster.clone(),
+                    &mut ctx,
+                    &broadcaster,
                     rule.session_id,
                     stack_id,
                     MessagePayload::System(crate::SystemMessage::UnhandledException {
                         message: format!("{res}"),
                     }),
-                )
-                .await;
+                );
             }
         };
     }
@@ -226,17 +227,20 @@ impl Claudes {
         );
 
         // Store the original user message for UI display
-        send_claude_message(
-            sync_ctx.clone(),
-            broadcaster.clone(),
-            session_id,
-            stack_id,
-            MessagePayload::User(UserInput {
-                message: user_params.message.clone(),
-                attachments: user_params.attachments.clone(),
-            }),
-        )
-        .await?;
+        {
+            let broadcaster = broadcaster.lock().await;
+            let mut ctx = sync_ctx.clone().into_thread_local();
+            send_claude_message(
+                &mut ctx,
+                &broadcaster,
+                session_id,
+                stack_id,
+                MessagePayload::User(UserInput {
+                    message: user_params.message.clone(),
+                    attachments: user_params.attachments.clone(),
+                }),
+            )?;
+        }
 
         // Configure SDK options
         let dangerously_skip_permissions = sync_ctx.settings.claude.dangerously_allow_all_permissions;
@@ -398,18 +402,20 @@ impl Claudes {
             );
             self.requests.lock().await.remove(&stack_id);
             crate::pending_requests::pending_requests().cancel_session(session_id);
-            if let Err(send_err) = send_claude_message(
-                sync_ctx.clone(),
-                broadcaster.clone(),
-                session_id,
-                stack_id,
-                MessagePayload::System(SystemMessage::UnhandledException {
-                    message: format!("Failed to connect to Claude SDK: {}", e),
-                }),
-            )
-            .await
             {
-                tracing::error!(error = %send_err, "Failed to send connection error message to frontend");
+                let broadcaster = broadcaster.lock().await;
+                let mut ctx = sync_ctx.clone().into_thread_local();
+                if let Err(send_err) = send_claude_message(
+                    &mut ctx,
+                    &broadcaster,
+                    session_id,
+                    stack_id,
+                    MessagePayload::System(SystemMessage::UnhandledException {
+                        message: format!("Failed to connect to Claude SDK: {}", e),
+                    }),
+                ) {
+                    tracing::error!(error = %send_err, "Failed to send connection error message to frontend");
+                }
             }
             return Err(e.into());
         }
@@ -436,16 +442,19 @@ impl Claudes {
             self.requests.lock().await.remove(&stack_id);
             crate::pending_requests::pending_requests().cancel_session(session_id);
             client.disconnect().await?;
-            send_claude_message(
-                sync_ctx.clone(),
-                broadcaster.clone(),
-                session_id,
-                stack_id,
-                MessagePayload::System(SystemMessage::UnhandledException {
-                    message: format!("Failed to send query to Claude: {}", e),
-                }),
-            )
-            .await?;
+            {
+                let broadcaster = broadcaster.lock().await;
+                let mut ctx = sync_ctx.clone().into_thread_local();
+                send_claude_message(
+                    &mut ctx,
+                    &broadcaster,
+                    session_id,
+                    stack_id,
+                    MessagePayload::System(SystemMessage::UnhandledException {
+                        message: format!("Failed to send query to Claude: {}", e),
+                    }),
+                )?;
+            }
             return Err(e.into());
         }
 
@@ -469,14 +478,15 @@ impl Claudes {
                                     if let Some(obj) = data.as_object_mut() {
                                         obj.insert("type".to_string(), serde_json::json!("assistant"));
                                     }
+                                    let broadcaster = broadcaster.lock().await;
+                                    let mut ctx = sync_ctx.clone().into_thread_local();
                                     send_claude_message(
-                                        sync_ctx.clone(),
-                                        broadcaster.clone(),
+                                        &mut ctx,
+                                        &broadcaster,
                                         session_id,
                                         stack_id,
                                         MessagePayload::Claude(ClaudeOutput { data }),
-                                    )
-                                    .await?;
+                                    )?;
                                 }
                                 SdkMessage::User(user_msg) => {
                                     // The CLI outputs: {"type": "user", "message": {"content": [...]}}
@@ -509,27 +519,29 @@ impl Claudes {
                                     // Note: AskUserQuestion answers are injected via the can_use_tool callback's
                                     // updated_input field, not by modifying the tool result here.
 
+                                    let broadcaster = broadcaster.lock().await;
+                                    let mut ctx = sync_ctx.clone().into_thread_local();
                                     send_claude_message(
-                                        sync_ctx.clone(),
-                                        broadcaster.clone(),
+                                        &mut ctx,
+                                        &broadcaster,
                                         session_id,
                                         stack_id,
                                         MessagePayload::Claude(ClaudeOutput { data }),
-                                    )
-                                    .await?;
+                                    )?;
                                 }
                                 SdkMessage::Result(result_msg) => {
+                                    let broadcaster = broadcaster.lock().await;
+                                    let mut ctx = sync_ctx.clone().into_thread_local();
                                     send_claude_message(
-                                        sync_ctx.clone(),
-                                        broadcaster.clone(),
+                                        &mut ctx,
+                                        &broadcaster,
                                         session_id,
                                         stack_id,
                                         MessagePayload::System(SystemMessage::ClaudeExit {
                                             code: if result_msg.is_error { 1 } else { 0 },
                                             message: result_msg.result.unwrap_or_default(),
                                         }),
-                                    )
-                                    .await?;
+                                    )?;
                                     break;
                                 }
                                 // System and StreamEvent messages are informational
@@ -542,31 +554,33 @@ impl Claudes {
                             }
                         }
                         Some(Err(e)) => {
+                            let broadcaster = broadcaster.lock().await;
+                            let mut ctx = sync_ctx.clone().into_thread_local();
                             send_claude_message(
-                                sync_ctx.clone(),
-                                broadcaster.clone(),
+                                &mut ctx,
+                                &broadcaster,
                                 session_id,
                                 stack_id,
                                 MessagePayload::System(SystemMessage::UnhandledException {
                                     message: format!("SDK error: {}", e),
                                 }),
-                            )
-                            .await?;
+                            )?;
                             break;
                         }
                         None => {
                             // Stream ended without a Result message - unexpected termination
+                            let broadcaster = broadcaster.lock().await;
+                            let mut ctx = sync_ctx.clone().into_thread_local();
                             send_claude_message(
-                                sync_ctx.clone(),
-                                broadcaster.clone(),
+                                &mut ctx,
+                                &broadcaster,
                                 session_id,
                                 stack_id,
                                 MessagePayload::System(SystemMessage::ClaudeExit {
                                     code: 1,
                                     message: "Claude session ended unexpectedly".to_string(),
                                 }),
-                            )
-                            .await?;
+                            )?;
                             break;
                         }
                     }
@@ -578,19 +592,24 @@ impl Claudes {
                         "Kill signal received - cancelling Claude session"
                     );
 
+                    // Send interrupt signal to forcefully stop the Claude CLI
+                    if let Err(e) = client.interrupt().await {
+                        tracing::warn!(error = %e, "Failed to send interrupt signal to Claude CLI");
+                    }
+
                     // Immediately cancel any pending permission/question requests
                     // so they don't block shutdown
                     crate::pending_requests::pending_requests().cancel_session(session_id);
 
+                    let broadcaster = broadcaster.lock().await;
+                    let mut ctx = sync_ctx.clone().into_thread_local();
                     if let Err(e) = send_claude_message(
-                        sync_ctx.clone(),
-                        broadcaster.clone(),
+                        &mut ctx,
+                        &broadcaster,
                         session_id,
                         stack_id,
                         MessagePayload::System(SystemMessage::UserAbort),
-                    )
-                    .await
-                    {
+                    ) {
                         tracing::warn!(error = %e, "Failed to send UserAbort message during cancellation");
                     }
                     break;
