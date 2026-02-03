@@ -9,6 +9,12 @@ rust-version.workspace = true
 [lib]
 doctest = false
 
+[features]
+default = []
+# Enable mock client support for E2E testing. When enabled with CLAUDE_MOCK_SCENARIO
+# environment variable set, uses MockClient instead of real Claude CLI.
+testing = ["claude-agent-sdk-rs/testing"]
+
 [dependencies]
 but-core.workspace = true
 but-action.workspace = true

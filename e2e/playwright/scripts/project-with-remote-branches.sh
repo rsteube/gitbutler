@@ -47,4 +47,6 @@ git clone remote-project local-clone
 pushd local-clone
   git checkout master
   $BUT_TESTING add-project --switch-to-workspace "$(git rev-parse --symbolic-full-name @{u})"
+  # Apply branch1 to the workspace so there's a stack to work with
+  $BUT_TESTING apply origin/branch1
 popd
