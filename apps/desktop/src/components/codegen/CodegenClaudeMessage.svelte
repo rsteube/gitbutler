@@ -3,7 +3,7 @@
 	import CodegenAssistantMessage from '$components/codegen/CodegenAssistantMessage.svelte';
 	import CodegenGitButlerMessage from '$components/codegen/CodegenGitButlerMessage.svelte';
 	import CodegenServiceMessage from '$components/codegen/CodegenServiceMessage.svelte';
-	import CodegenToolCalls from '$components/codegen/CodegenToolCalls.svelte';
+	import CodegenToolCall from '$components/codegen/CodegenToolCall.svelte';
 	import CodegenUserMessage from '$components/codegen/CodegenUserMessage.svelte';
 	import { type Message } from '$lib/codegen/messages';
 	import { Icon, Markdown } from '@gitbutler/ui';
@@ -37,23 +37,34 @@
 			{/snippet}
 		</CodegenServiceMessage>
 	{:else}
-		<CodegenAssistantMessage content={message.message} />
-		<CodegenToolCalls
-			{projectId}
-			toolCalls={message.toolCalls}
-			messageId={message.createdAt}
-			{toolCallExpandedState}
-		/>
-		{#if message.toolCallsPendingApproval.length > 0}
-			{#each message.toolCallsPendingApproval as toolCall}
+		<!-- Render content blocks in their original order -->
+		{#each message.contentBlocks as block, index}
+			{@const prevBlock = message.contentBlocks[index - 1]}
+			{@const isFirstToolCall = block.type === 'toolCall' && prevBlock?.type !== 'toolCall'}
+			{@const isLastToolCall =
+				block.type === 'toolCall' && message.contentBlocks[index + 1]?.type !== 'toolCall'}
+			{#if block.type === 'text'}
+				<CodegenAssistantMessage content={block.text} />
+			{:else if block.type === 'toolCall'}
+				{#if block.toolCall.name !== 'TodoWrite'}
+					<div class="tool-call-wrapper" class:first={isFirstToolCall} class:last={isLastToolCall}>
+						<CodegenToolCall
+							{projectId}
+							toolCall={block.toolCall}
+							toolCallKey="{message.createdAt}-{index}"
+							{toolCallExpandedState}
+						/>
+					</div>
+				{/if}
+			{:else if block.type === 'toolCallPendingApproval'}
 				<CodegenApprovalToolCall
 					{projectId}
-					{toolCall}
+					toolCall={block.toolCall}
 					onPermissionDecision={async (id, decision, useWildcard) =>
 						await onPermissionDecision?.(id, decision, useWildcard)}
 				/>
-			{/each}
-		{/if}
+			{/if}
+		{/each}
 	{/if}
 {:else if message.source === 'gitButler'}
 	<CodegenGitButlerMessage {projectId} {message} />
@@ -133,5 +144,15 @@
 
 	.compaction-summary__content {
 		padding: 12px;
+	}
+
+	/* Tool call wrapper to handle spacing for consecutive tool calls */
+	.tool-call-wrapper {
+		&.first {
+			padding-top: 12px;
+		}
+		&.last {
+			padding-bottom: 12px;
+		}
 	}
 </style>

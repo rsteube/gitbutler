@@ -13,6 +13,12 @@ import type {
 	SystemMessage
 } from '$lib/codegen/types';
 
+/** A content block that can be either text or a tool call, preserving original order */
+export type ContentBlock =
+	| { type: 'text'; text: string }
+	| { type: 'toolCall'; toolCall: ToolCall }
+	| { type: 'toolCallPendingApproval'; toolCall: ToolCall };
+
 export type Message = { createdAt: string } &
 	/* This is strictly only things that the real fleshy human has said */
 	(| {
@@ -20,12 +26,17 @@ export type Message = { createdAt: string } &
 				message: string;
 				attachments?: PromptAttachment[];
 		  }
-		/* Output from claude. This is grouped as: A claude message with a bunch of tool calls. */
+		/* Output from claude. Content blocks preserve original ordering of text and tool calls. */
 		| {
 				source: 'claude';
+				/** @deprecated Use contentBlocks instead for proper ordering */
 				message: string;
+				/** @deprecated Use contentBlocks instead for proper ordering */
 				toolCalls: ToolCall[];
+				/** @deprecated Use contentBlocks instead for proper ordering */
 				toolCallsPendingApproval: ToolCall[];
+				/** Content blocks in their original order from the API response */
+				contentBlocks: ContentBlock[];
 		  }
 		| {
 				source: 'claude';
@@ -33,6 +44,7 @@ export type Message = { createdAt: string } &
 				message: string;
 				toolCalls: ToolCall[];
 				toolCallsPendingApproval: ToolCall[];
+				contentBlocks: ContentBlock[];
 		  }
 		| ({
 				source: 'system';
@@ -177,49 +189,59 @@ export function formatMessages(
 
 			if (payload.type === 'claudeExit' && payload.code !== 0) {
 				if (previousEventLoginFailureQuery(events, message)) {
+					const msg = `Claude Code is currently not logged in.\n\n Please run \`claude\` in your terminal and complete the login flow in order to use the GitButler Claude Code integration.`;
 					out.push({
 						source: 'claude',
 						createdAt: message.createdAt,
-						message: `Claude Code is currently not logged in.\n\n Please run \`claude\` in your terminal and complete the login flow in order to use the GitButler Claude Code integration.`,
-						toolCalls: [],
-						toolCallsPendingApproval: []
-					});
-				} else {
-					out.push({
-						source: 'claude',
-						message: `Claude exited with non 0 error code \n\n\`\`\`\n${payload.message}\n\`\`\``,
+						message: msg,
 						toolCalls: [],
 						toolCallsPendingApproval: [],
-						createdAt: message.createdAt
+						contentBlocks: [{ type: 'text', text: msg }]
+					});
+				} else {
+					const msg = `Claude exited with non 0 error code \n\n\`\`\`\n${payload.message}\n\`\`\``;
+					out.push({
+						source: 'claude',
+						message: msg,
+						toolCalls: [],
+						toolCallsPendingApproval: [],
+						createdAt: message.createdAt,
+						contentBlocks: [{ type: 'text', text: msg }]
 					});
 				}
 			}
 			if (payload.type === 'unhandledException') {
+				const msg = `Encountered an unhandled exception when executing Claude.\nPlease verify your Claude Code installation location and try clearing the context. \n\n\`\`\`\n${payload.message}\n\`\`\``;
 				out.push({
 					source: 'claude',
-					message: `Encountered an unhandled exception when executing Claude.\nPlease verify your Claude Code installation location and try clearing the context. \n\n\`\`\`\n${payload.message}\n\`\`\``,
+					message: msg,
 					toolCalls: [],
 					toolCallsPendingApproval: [],
-					createdAt: message.createdAt
+					createdAt: message.createdAt,
+					contentBlocks: [{ type: 'text', text: msg }]
 				});
 			}
 			if (payload.type === 'userAbort') {
+				const msg = `I've stopped! What can I help you with next?`;
 				out.push({
 					source: 'claude',
 					createdAt: message.createdAt,
-					message: `I've stopped! What can I help you with next?`,
+					message: msg,
 					toolCalls: [],
-					toolCallsPendingApproval: []
+					toolCallsPendingApproval: [],
+					contentBlocks: [{ type: 'text', text: msg }]
 				});
 			}
 			if (payload.type === 'compactFinished') {
+				const msg = `Context compaction completed: ${payload.summary}`;
 				out.push({
 					source: 'claude',
 					createdAt: message.createdAt,
 					subtype: 'compaction',
-					message: `Context compaction completed: ${payload.summary}`,
+					message: msg,
 					toolCalls: [],
-					toolCallsPendingApproval: []
+					toolCallsPendingApproval: [],
+					contentBlocks: [{ type: 'text', text: msg }]
 				});
 			}
 		} else if (payload.source === 'gitButler') {
